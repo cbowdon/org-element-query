@@ -1,0 +1,11 @@
+* Lisp								   :noexport:
+
+#+NAME: foo
+#+BEGIN_SRC emacs-lisp
+"test 1"
+#+END_SRC
+
+#+NAME: bar
+#+BEGIN_SRC emacs-lisp
+"test 2"
+#+END_SRC
