@@ -1,35 +1,36 @@
-(defun org-element-query (path list-of-asts)
-  "Select all contents of LIST-OF-ASTS matching PATH"
-  (defun --subpath-match (p)
-    (org-element--select-contents (car p) list-of-asts))
-  (if (cadr path)
-      (org-element-query (cdr path) (--subpath-match path))
-    (--subpath-match path)))
+;; -*- lexical-binding: t -*-
 
-(defun org-element--all-contents (list-of-asts)
-  "Get a flat list of the contents of all ASTs in LIST-OF-ASTS"
-  (apply 'seq-concatenate
-	 'list
-	 (seq-map 'org-element-contents list-of-asts)))
+(defun org-element-query (query &optional ast)
+  "Select all contents of current buffer matching QUERY. QUERY is a list of symbols representing org-element types or properties.
 
-(defun org-element--select-contents (descriptor list-of-asts)
-  "Selector all contents of ASTs in LIST-OF-ASTS matching DESCRIPTOR"
-  (cond ((and (symbolp descriptor)
-	      (string-prefix-p ":" (symbol-name descriptor)))
-	 (seq-map (lambda (x) (org-element-property descriptor x)) list-of-asts))
-	((functionp descriptor)
-	 (message (format "func %s" (funcall descriptor 1)))
-	 ;; WHY DOESN'T THIS WORK?
-	 (org-element--filter-contents (lambda (x) (funcall descriptor x)) list-of-asts))
-	(t (org-element--contents-of-type descriptor list-of-asts))))
+If AST (abstract syntax tree) is non-nil, parse that rather than current buffer. AST should be a result of calling `org-element-parse-buffer'."
+  (org-element-query--select query
+			     (or ast (org-element-parse-buffer))))
 
-(defun org-element--filter-contents (pred list-of-asts)
-  "Filter all contents of ASTs in LIST-OF-ASTS by PRED"
-  (seq-filter pred
-	      (org-element--all-contents list-of-asts)))
+(defun org-element-query--select (query element)
+  (let ((s (car query))
+	(rest (cdr query)))
+    (cond ((not rest)
+	   (cond ((org-element-query--propertyp s) (list (org-element-property s element)))
+		 ((org-element-query--typep s element) (list element))
+		 (t '())))
+	  ((org-element-query--typep s element)
+	   (cond ((org-element-query--propertyp (car rest))
+		  (org-element-query--select rest element))
+		 (t (org-element-query--flatmap
+		     (lambda (e) (org-element-query--select rest e))
+		     element)))))))
 
-(defun org-element--contents-of-type (type list-of-asts)
-  "Select all contents of ASTs in LIST-OF-ASTS matching TYPE"
-  (org-element--filter-contents
-   (lambda (c) (eq type (org-element-type c)))
-   list-of-asts))
+(defun org-element-query--propertyp (s)
+  (and (symbolp s) (string-prefix-p ":" (symbol-name s))))
+
+(defun org-element-query--map (fun element)
+  (seq-map fun (org-element-contents element)))
+
+(defun org-element-query--flatmap (fun element)
+  (message (format "flatmap of %s" element))
+  (apply 'seq-concatenate 'list
+	 (org-element-query--map fun element)))
+
+(defun org-element-query--typep (type element)
+  (eq type (org-element-type element)))
