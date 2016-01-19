@@ -2,9 +2,11 @@
 
 (load-file "org-element-query.el")
 
+(setq org-file (find-file-noselect "test.org"))
+
 (ert-deftest org-element-query--typep ()
   "Type predicate should return t or nil"
-  (with-current-buffer "test.org"
+  (with-current-buffer org-file
     (let ((data (org-element-parse-buffer)))
       (should
        (org-element-query--typep 'org-data data))
@@ -49,52 +51,52 @@
 		      (headline nil (example-block nil))
 		      (headline nil))))))
 
-(ert-deftest org-element-query--select ()
+(ert-deftest org-element-query--internal ()
   "Should return query results"
   (should
    (equal '((org-data nil))
-	  (org-element-query--select '(org-data)
-				     '(org-data nil))))
+	  (org-element-query--internal '(org-data)
+				       '(org-data nil))))
   (should
    (equal '((src-block nil)
 	    (src-block nil))
-	  (org-element-query--select '(org-data src-block)
-				     '(org-data nil
-						(src-block nil)
-						(src-block nil)))))
+	  (org-element-query--internal '(org-data src-block)
+				       '(org-data nil
+						  (src-block nil)
+						  (src-block nil)))))
   (should 
    (not
-    (org-element-query--select '(org-data headline example-block)
-			       '(org-data nil
-					  (headline nil
-						    (src-block nil)
-						    (src-block nil))))))
+    (org-element-query--internal '(org-data headline example-block)
+				 '(org-data nil
+					    (headline nil
+						      (src-block nil)
+						      (src-block nil))))))
   (should
    (equal '((src-block nil)
 	    (src-block nil))
-	  (org-element-query--select '(org-data headline src-block)
-				     '(org-data nil
-						(headline nil
-							  (src-block nil)
-							  (src-block nil))))))
+	  (org-element-query--internal '(org-data headline src-block)
+				       '(org-data nil
+						  (headline nil
+							    (src-block nil)
+							    (src-block nil))))))
   (should
    (equal '("foo" "bar")
-	  (org-element-query--select '(org-data headline src-block :name)
-				     '(org-data nil
-						(headline nil
-							  (src-block (:name "foo"))
-							  (src-block (:name "bar")))))))
+	  (org-element-query--internal '(org-data headline src-block :name)
+				       '(org-data nil
+						  (headline nil
+							    (src-block (:name "foo"))
+							    (src-block (:name "bar")))))))
   (should
    (equal '(nil nil)
-	  (org-element-query--select '(org-data headline src-block :baz)
-				     '(org-data nil
-						(headline nil
-							  (src-block (:name "foo"))
-							  (src-block (:name "bar"))))))))
+	  (org-element-query--internal '(org-data headline src-block :baz)
+				       '(org-data nil
+						  (headline nil
+							    (src-block (:name "foo"))
+							    (src-block (:name "bar"))))))))
 
 (ert-deftest org-element-query-can-parse-test-buffer ()
   "Demonstrates simple path query extracting the name property of source blocks"
-  (with-current-buffer "test.org"
+  (with-current-buffer org-file
     (should
      (eq nil (org-element-query '())))
     (should
@@ -110,7 +112,32 @@
   (should
    (equal '("foo" "bar")
 	  (org-element-query '(headline section src-block :name)
-			     (with-current-buffer "test.org"
+			     (with-current-buffer org-file
 			       (car
 				(org-element-contents
 				 (org-element-parse-buffer))))))))
+
+(ert-deftest make-like-xpath ()
+  "Matching correctly"
+  (should
+   (equal 
+    "/org-data/headline[:raw-value=identity]/section/src-block:value"
+    (string-join
+     (make-like-xpath
+      '(org-data
+	(headline :raw-value identity)
+	section
+	(src-block :value)))))))
+
+(ert-deftest oeq ()
+  "oeq"
+  (should
+   (equal 
+    '("foo" "bar")
+     (oeq
+      '(org-data (headline :raw-value identity) section (src-block :value))
+      '(org-data nil
+		 (headline (:raw-value "Lisp")
+			   (section nil
+				    (src-block (:value "foo"))
+				    (src-block (:value "bar")))))))))
