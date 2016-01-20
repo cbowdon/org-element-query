@@ -1,8 +1,10 @@
 ;; -*- lexical-binding: t -*-
 
-(defun org-element-query (query element)
+(defun org-element-query (query &optional element)
   "Runs an XPath-like QUERY on an org-mode ELEMENT parse tree (i.e. output of `org-element-parse-buffer'). 
-Returns a flat list of all selected items matching query.
+Returns a flat list of all selected items matching QUERY.
+
+If ELEMENT is nil (and query starts with \"org-data\") then get ELEMENT by parsing current buffer.
 
 Example queries:
 
@@ -39,27 +41,32 @@ where
   Type = org element type, see `org-element-all-elements'.
   Prop = org element property (e.g. name, caption)
   Pred = predicate on the property (i.e. an arity-one lambda, returning non-nil if satisfied)"
-  (pcase query
 
-    (`((,type ,prop ,pred) . ,rest) 
-     (when (and
-	    (eq type (org-element-type element))
-	    (funcall pred (org-element-property prop element)))
-       (apply 'seq-concatenate 'list
-	      (seq-map (lambda (e) (org-element-query rest e))
-		       (org-element-contents element)))))
+  (if (and (not element)
+	   (eq 'org-data (car query)))
+      (org-element-query query (org-element-parse-buffer))
+    
+    (pcase query
 
-    (`((,type ,prop) . nil) 
-     (when (eq type (org-element-type element))
-       (list (org-element-property prop element))))
+      (`((,type ,prop ,pred) . ,rest) 
+       (when (and
+	      (eq type (org-element-type element))
+	      (funcall pred (org-element-property prop element)))
+	 (apply 'seq-concatenate 'list
+		(seq-map (lambda (e) (org-element-query rest e))
+			 (org-element-contents element)))))
 
-    (`(,type . ,rest?)
-     (when (eq type (org-element-type element))
-       (if rest?
-	   (apply 'seq-concatenate 'list
-		  (seq-map (lambda (e) (org-element-query rest? e))
-			   (org-element-contents element)))
-	 (list element))))
+      (`((,type ,prop) . nil) 
+       (when (eq type (org-element-type element))
+	 (list (org-element-property prop element))))
 
-    (unknown
-     (error "Failed to parse query format: %" unknown))))
+      (`(,type . ,rest?)
+       (when (eq type (org-element-type element))
+	 (if rest?
+	     (apply 'seq-concatenate 'list
+		    (seq-map (lambda (e) (org-element-query rest? e))
+			     (org-element-contents element)))
+	   (list element))))
+
+      (unknown
+       (error "Failed to parse query format: %" unknown)))))
