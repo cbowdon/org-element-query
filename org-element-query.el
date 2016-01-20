@@ -1,94 +1,65 @@
 ;; -*- lexical-binding: t -*-
 
-(defun org-element-query (query &optional ast)
-  "Select all contents of current buffer matching QUERY. QUERY is a list of symbols representing org-element types or properties.
+(defun org-element-query (query element)
+  "Runs an XPath-like QUERY on an org-mode ELEMENT parse tree (i.e. output of `org-element-parse-buffer'). 
+Returns a flat list of all selected items matching query.
 
-If AST (abstract syntax tree) is non-nil, parse that rather than current buffer. AST should be a result of calling `org-element-parse-buffer'."
-  (org-element-query--internal query
-			       (or ast (org-element-parse-buffer))))
+Example queries:
 
-(defun org-element-query--internal (query element)
-  (let ((s (car query))
-	(rest (cdr query)))
-    ;; TODO is there a cleaner way?
-    (cond ((not rest)
-	   (cond ((org-element-query--propertyp s) (list (org-element-property s element)))
-		 ((org-element-query--typep s element) (list element))
-		 (t '())))
-	  ((org-element-query--typep s element)
-	   (cond ((org-element-query--propertyp (car rest))
-		  (org-element-query--internal rest element))
-		 (t (org-element-query--flatmap
-		     (lambda (e) (org-element-query--internal rest e))
-		     element)))))))
+1. To get all top-level headlines:
 
-(defun org-element-query--propertyp (s)
-  (and (symbolp s) (string-prefix-p ":" (symbol-name s))))
+    '(org-data headline)
 
-(defun org-element-query--map (fun element)
-  (seq-map fun (org-element-contents element)))
+XPath equivalent: /org-data/headline
 
-(defun org-element-query--flatmap (fun element)
-  (message (format "flatmap of %s" element))
-  (apply 'seq-concatenate 'list
-	 (org-element-query--map fun element)))
+2. To get all top-level headlines starting with `foo':
 
-(defun org-element-query--typep (type element)
-  (eq type (org-element-type element)))
+    '(org-data
+      (headline :raw-value (lambda (x) (string-prefix-p \"foo\" x))))
 
-;; if it were xpath
-;; /org-data/headline[:raw-value=Ex*]/section/src-block/:value
+XPath(ish) equivalent: /org-data/headline[:raw-value=foo*]
 
-'(org-data
-  (headline :raw-value (lambda (x) (string-prefix-p "Ex" x)))
-  section
-  (src-block :value))
+3. To get the names of any source blocks under top-level headlines starting with `foo':
 
-;; type query =
-;; | '(element-type)
-;; | '(element-type . query)
-;; | '((element-type property pred) . query)
-;; | '((element-type property))
-;; | '((element-type property pred)) TODO
+    '(org-data
+      (headline :raw-value (lambda (x) (string-prefix-p \"foo\" x)))
+      section
+      (src-block :names))
 
-(defun make-like-xpath (query)
+XPath(ish) equivalent: /org-data/headline[:raw-value=foo*]/section/src-block:value
+
+Query grammar:
+
+type Query =
+| '((Type Prop Pred) . Query)
+| '((Type Prop) . nil)
+| '(Type . Query)
+| '(Type . nil)
+where
+  Type = org element type, see `org-element-all-elements'.
+  Prop = org element property (e.g. name, caption)
+  Pred = predicate on the property (i.e. an arity-one lambda, returning non-nil if satisfied)"
   (pcase query
-    (`((,type ,prop)) (list (format "/%s%s" type prop)))
-    (`(,type . nil) (list (format "/%s" type)))
-    (`((,type ,prop ,pred) . ,rest)
-     (cons (format "/%s[%s=%s]" type prop pred)
-	   (make-like-xpath rest)))
-    (`(,type . ,rest)
-     (cons (format "/%s" type)
-	   (make-like-xpath rest)))
-    (unknown (list (format "/unknown %s" unknown)))))
 
-(defun oeq (query element)
-  (pcase query
-    (`((,type ,prop))
-     (message (format "type prop %s" (org-element-type element)))
-     (when (eq type (org-element-type element))
-       (list (org-element-property prop element))))
-    (`(,type . nil)
-     (message (format "type nil %s" (org-element-type element)))
-     (when (eq type (org-element-type element))
-       (list element)))
-    (`((,type ,prop ,pred) . ,rest)
-     (message (format "type prop pred %s" (org-element-type element)))
+    (`((,type ,prop ,pred) . ,rest) 
      (when (and
 	    (eq type (org-element-type element))
 	    (funcall pred (org-element-property prop element)))
        (apply 'seq-concatenate 'list
-	      (seq-map
-	       (lambda (e) (oeq rest e))
-	       (org-element-contents element)))))
-    (`(,type . ,rest)
-     (message (format "type rest %s" (org-element-type element)))
+	      (seq-map (lambda (e) (org-element-query rest e))
+		       (org-element-contents element)))))
+
+    (`((,type ,prop) . nil) 
      (when (eq type (org-element-type element))
-       (apply 'seq-concatenate 'list
-	      (seq-map
-	       (lambda (e) (oeq rest e))
-	       (org-element-contents element)))))
+       (list (org-element-property prop element))))
+
+    (`(,type . ,rest?)
+     (when (eq type (org-element-type element))
+       (if rest?
+	   (apply 'seq-concatenate 'list
+		  (seq-map (lambda (e) (org-element-query rest? e))
+			   (org-element-contents element)))
+	 (list element))))
+
     (unknown
-     (message (format "unknown %s" unknown))
-     '())))
+     (error "Failed to parse query format: %" unknown))))
