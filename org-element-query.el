@@ -51,7 +51,7 @@ where
       (`((,type ,prop ,pred) . ,rest) 
        (when (and
 	      (eq type (org-element-type element))
-	      (funcall pred (org-element-property prop element)))
+	      (org-element-query--apply pred (org-element-property prop element)))
 	 (apply 'seq-concatenate 'list
 		(seq-map (lambda (e) (org-element-query rest e))
 			 (org-element-contents element)))))
@@ -68,5 +68,14 @@ where
 			     (org-element-contents element)))
 	   (list element))))
 
-      (unknown
-       (error "Failed to parse query format: %" unknown)))))
+      (_
+       (error "Failed to parse query: %" query)))))
+
+(defun org-element-query--apply (form x)
+  (message (format "apply %s" form))
+  (pcase form
+    ;; TODO which is it?
+    (`(`quote (,f . ,args)) (eval `(,f ,@args ,x)))
+    (`(`quote ,f) (funcall f x))
+    (`(,f . ,args) (eval `(,f ,@args ,x)))
+    (f (funcall f x))))

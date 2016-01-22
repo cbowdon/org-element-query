@@ -8,10 +8,9 @@
    (equal '((org-data nil))
 	  (org-element-query '(org-data)
 			     '(org-data nil))))
-  (should
-   (not
-    (org-element-query '(headline)
-		       '(org-data nil))))
+  (should-not
+   (org-element-query '(headline)
+		      '(org-data nil)))
   (should
    (equal '((org-data nil (headline nil)))
 	  (org-element-query '(org-data)
@@ -35,13 +34,12 @@
 					(headline nil
 						  (src-block nil)
 						  (src-block nil))))))
-  (should 
-   (not
-    (org-element-query '(org-data headline example-block)
-		       '(org-data nil
-				  (headline nil
-					    (src-block nil)
-					    (src-block nil)))))))
+  (should-not
+   (org-element-query '(org-data headline example-block)
+		      '(org-data nil
+				 (headline nil
+					   (src-block nil)
+					   (src-block nil))))))
 
 (ert-deftest org-element-query--properties ()
   "e.g. /org-data/headline/src-block:name should return the src-block names"
@@ -52,20 +50,18 @@
 					(headline nil
 						  (src-block (:name "foo"))
 						  (src-block (:name "bar")))))))
-  (should
-   (not
-    (org-element-query '(org-data headline (example-block :name))
-		       '(org-data nil
-				  (headline nil
-					    (src-block (:name "foo"))
-					    (src-block (:name "bar")))))))
-  (should
-   (equal nil
-	  (org-element-query '(org-data headline src-block :baz)
-			     '(org-data nil
-					(headline nil
-						  (src-block (:name "foo"))
-						  (src-block (:name "bar")))))))
+  (should-not
+   (org-element-query '(org-data headline (example-block :name))
+		      '(org-data nil
+				 (headline nil
+					   (src-block (:name "foo"))
+					   (src-block (:name "bar"))))))
+  (should-not
+   (org-element-query '(org-data headline src-block :baz)
+		      '(org-data nil
+				 (headline nil
+					   (src-block (:name "foo"))
+					   (src-block (:name "bar"))))))
   (should
    (equal 
     '("foo" "bar")
@@ -84,22 +80,41 @@
 	    (src-block (:name "bar")))
 	  (org-element-query
 	   '(org-data
+	     (headline :raw-value (string-prefix-p "foo"))
+	     src-block)
+	   '(org-data nil
+		      (headline (:raw-value "foobar")
+				(src-block (:name "foo"))
+				(src-block (:name "bar")))
+		      (headline (:raw-value "baz")
+				(src-block (:name "baz")))))))
+  (should
+   (equal '((src-block (:name "foo"))
+	    (src-block (:name "bar")))
+	  (org-element-query
+	   '(org-data
+	     (headline :raw-value starts-with-foo)
+	     src-block)
+	   '(org-data nil
+		      (headline (:raw-value "foobar")
+				(src-block (:name "foo"))
+				(src-block (:name "bar")))
+		      (headline (:raw-value "baz")
+				(src-block (:name "baz")))))))
+  (should
+   (equal '((src-block (:name "foo"))
+	    (src-block (:name "bar")))
+	  (org-element-query
+	   '(org-data
 	     (headline :raw-value (lambda (x) (string-prefix-p "foo" x)))
 	     src-block)
 	   '(org-data nil
 		      (headline (:raw-value "foobar")
 				(src-block (:name "foo"))
-				(src-block (:name "bar")))))))
-  (should
-   (not
-    (org-element-query
-     '(org-data
-       (headline :raw-value (lambda (x) (string-prefix-p "foo" x)))
-       src-block)
-     '(org-data nil
-		(headline (:raw-value "baz")
-			  (src-block (:name "foo"))
-			  (src-block (:name "bar"))))))))
+				(src-block (:name "bar")))
+		      (headline (:raw-value "baz")
+				(src-block (:name "baz")))))))
+  )
 
 (ert-deftest org-element-query--complex-structures ()
   "e.g. /org-data/headline[:raw-value=foo*]/src-block:name should return src block names under a headline like `foo', but not under other src-block names"
@@ -107,7 +122,7 @@
    (equal '("foo" "bar" "baz")
 	  (org-element-query
 	   '(org-data
-	     (headline :raw-value (lambda (x) (string-prefix-p "foo" x)))
+	     (headline :raw-value (string-prefix-p "foo"))
 	     (src-block :name))
 	   '(org-data nil
 		      (headline (:raw-value "foobar")
@@ -129,7 +144,7 @@
 	  (with-current-buffer org-file
 	    (org-element-query
 	     '(org-data
-	       (headline :raw-value (lambda (x) (string= "Lisp" x)))
+	       (headline :raw-value (string= "Lisp"))
 	       section
 	       (src-block :name))))))
 
@@ -138,14 +153,31 @@
      (equal 
       (org-element-query
        '(org-data
-	 (headline :raw-value (lambda (x) (string= "Lisp" x)))
+	 (headline :raw-value (string= "Lisp"))
 	 section
 	 (src-block :name))
        (org-element-parse-buffer))
       (org-element-query
        '(org-data
-	 (headline :raw-value (lambda (x) (string= "Lisp" x)))
+	 (headline :raw-value (string= "Lisp"))
 	 section
 	 (src-block :name)))))))
 
+(defun starts-with-foo (str)
+  (string-prefix-p "foo" str))
 
+(defun six-times (num)
+  (* 6 num))
+
+(ert-deftest org-element-query--apply-last ()
+  "Should apply curried function"
+  (should
+   (equal '(* 6 7)
+	  (org-element-query--apply-last '(* 6) 7)))
+  (should
+   (equal '(six-times 7)
+	  (org-element-query--apply-last 'six-times 7)))
+  (should
+   (equal '((lambda (x) (* 6 x)) 7)
+	  (org-element-query--apply-last #'(lambda (x) (* 6 x)) 7)))
+  )
