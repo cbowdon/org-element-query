@@ -21,10 +21,20 @@ XPath equivalent: /org-data/headline
 
 XPath(ish) equivalent: /org-data/headline[:raw-value=foo*]
 
+You can use a shorthand for predicates to simplify that:
+
+    '(org-data
+      (headline :raw-value (string-prefix-p \"foo\")))
+
+Of course you can also pass a function by its symbol:
+
+    '(org-data
+      (headline :raw-value starts-with-foo))
+
 3. To get the names of any source blocks under top-level headlines starting with `foo':
 
     '(org-data
-      (headline :raw-value (lambda (x) (string-prefix-p \"foo\" x)))
+      (headline :raw-value (string-prefix-p \"foo\"))
       section
       (src-block :names))
 
@@ -51,7 +61,7 @@ where
       (`((,type ,prop ,pred) . ,rest) 
        (when (and
 	      (eq type (org-element-type element))
-	      (org-element-query--apply pred (org-element-property prop element)))
+	      (org-element-query--apply-last pred (org-element-property prop element)))
 	 (apply 'seq-concatenate 'list
 		(seq-map (lambda (e) (org-element-query rest e))
 			 (org-element-contents element)))))
@@ -71,11 +81,14 @@ where
       (_
        (error "Failed to parse query: %" query)))))
 
-(defun org-element-query--apply (form x)
-  (message (format "apply %s" form))
+(defun org-element-query--apply-last (form x)
+  "Enable shorthand notation of predicates. Note that form is always received quoted, hence not a macro."
   (pcase form
-    ;; TODO which is it?
-    (`(`quote (,f . ,args)) (eval `(,f ,@args ,x)))
-    (`(`quote ,f) (funcall f x))
-    (`(,f . ,args) (eval `(,f ,@args ,x)))
-    (f (funcall f x))))
+    ((and (pred listp)
+	  (guard (or (eq 'lambda (car form))
+		     (eq 'closure (car form)))))
+     (funcall form x))
+    (`(,f . ,args)
+     (eval `(,f ,@args ,x)))
+    (f
+     (funcall f x))))

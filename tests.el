@@ -172,12 +172,11 @@
 (ert-deftest org-element-query--apply-last ()
   "Should apply curried function"
   (should
-   (equal '(* 6 7)
+   (equal (* 6 7)
 	  (org-element-query--apply-last '(* 6) 7)))
   (should
-   (equal '(six-times 7)
+   (equal (six-times 7)
 	  (org-element-query--apply-last 'six-times 7)))
   (should
-   (equal '((lambda (x) (* 6 x)) 7)
-	  (org-element-query--apply-last #'(lambda (x) (* 6 x)) 7)))
-  )
+   (equal ((lambda (x) (* 6 x)) 7)
+	  (org-element-query--apply-last (lambda (x) (* 6 x)) 7))))
